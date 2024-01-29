@@ -27,7 +27,13 @@ c2i, i2c = load_token_map(c2i_file=args.c2i, i2c_file=args.i2c)
 my_model = torch.load('minigpt-cpu.pth')
 my_model.eval()
 
-dummy_input = torch.tensor(encoder("dummy prompt", c2i), device=device).unsqueeze(0)
+dummy_input = torch.tensor(encoder("dummy input", c2i), device=device).unsqueeze(0)
 
-model_history = tl.log_forward_pass(my_model, dummy_input, layers_to_save='all', vis_opt='unrolled')
-print(model_history)
+print(dummy_input)
+
+#model_history = tl.log_forward_pass(my_model, dummy_input, layers_to_save='all', vis_opt='unrolled')
+model_history = tl.log_forward_pass(my_model, dummy_input, layers_to_save='all', vis_opt='none')
+
+logFile = open('log.txt', 'w')
+print(model_history, file = logFile)
+logFile.close()
