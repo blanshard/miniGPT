@@ -33,8 +33,10 @@ model_input = torch.tensor(encoder(args.prompt, c2i), device=device).unsqueeze(0
 
 print(model_input)
 
-model_history = tl.log_forward_pass(my_model, model_input, layers_to_save='all', vis_opt='unrolled')
+# uncomment to generate graph as well as stats
+#model_history = tl.log_forward_pass(my_model, model_input, layers_to_save='all', vis_opt='unrolled')
+model_history = tl.log_forward_pass(my_model, model_input, layers_to_save='all', vis_opt='none')
 
-logFile = open('log.txt', 'w')
+logFile = open('layer-stats.txt', 'w')
 print(model_history, file = logFile)
 logFile.close()
