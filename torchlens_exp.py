@@ -28,6 +28,8 @@ print(f"Loading model {args.model}")
 my_model = torch.load(args.model)
 my_model.eval()
 
+print(f"Model vocab_size ({my_model.vocab_size})")
+
 print(f"Using prompt ({args.prompt})")
 model_input = torch.tensor(encoder(args.prompt, c2i), device=device).unsqueeze(0)
 print(f"Using model_input {model_input}")
@@ -68,6 +70,7 @@ model_history = tl.log_forward_pass(
     vis_opt='none',          # Make 'none' for no graph generation, 'unrolled' to generate graph
     vis_save_only=True, 
     vis_direction='leftright',
+    print_details=False,
 )
 
 # Print resulting stats to a file
