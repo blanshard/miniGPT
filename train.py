@@ -5,10 +5,10 @@ import os
 import datetime
 import time
 
-import intel_extension_for_pytorch as ipex
+#import intel_extension_for_pytorch as ipex
 
 # PyTorch TensorBoard support
-from torch.utils.tensorboard import SummaryWriter
+#from torch.utils.tensorboard import SummaryWriter
 
 from model import miniGPT
 from data import Data
@@ -74,8 +74,8 @@ def train(session_name:str = None):
 
     if session_name is None:
         writer = None
-    else:
-        writer = SummaryWriter(os.path.join('runs', session_name))
+#    else:
+#        writer = SummaryWriter(os.path.join('runs', session_name))
 
     # Prepare the dataset
     data = Data(source = args.input, block_size = block_size, training_set_ratio = training_set_ratio)
