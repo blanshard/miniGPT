@@ -10,6 +10,18 @@ from data import encoder, decoder, load_token_map
 # python memutils module
 import memutils
 
+# Whether to log allocation timings
+allocTimings = False
+
+def maybe_log_alloc_times():
+    global allocTimings
+    if allocTimings:
+        memutils.log_and_clear_alloc_times()
+
+def maybe_clear_alloc_times():
+    global allocTimings
+    if allocTimings:
+        memutils.clear_alloc_times()
 
 def small_test(verbose, printDetails=False):
     if verbose:    print("small test: x = torch.empty(1000, 1000)")
@@ -36,8 +48,10 @@ def small_test(verbose, printDetails=False):
 
 
 def main():
+    global allocTimings
+    
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--model', default='minigpt.pth', help='Input text for training.', type=str)
+    parser.add_argument('-m', '--model', default='minigpt.pth', help='Model for generation.', type=str)
     parser.add_argument('-l', '--gen_length', default=100, help='Maximum length to generate.', type=int)
     parser.add_argument('--c2i', default='c2i.json', help='Token map file (character to index).', type=str)
     parser.add_argument('--i2c', default='i2c.json', help='Token map file (index to character).', type=str)
@@ -60,8 +74,7 @@ def main():
     if verbose:    print("Setting up memory utils")
     memutils.set_period(0)
     logDetails = args.statsdetail
-    memutils.use_umf(args.umf)
-    memutils.use_cxl(args.cxl)
+    memutils.init_memory_allocators(args.umf, args.cxl)
     statsInCsv = False
 
     device = (
@@ -71,31 +84,59 @@ def main():
     )
     if verbose:    print(f"Using {device} device")
     
+    if args.test:
+        # By calling this in a function we know that anything it allocated is freed before it returns
+        small_test(verbose=verbose, printDetails=args.statsdetail)
+            
+        # can't do this here since everything was freed by the time we get here
+        #memutils.log_stats(prefix="After test", clearStats=True, printDetails=args.details)
+
+        maybe_log_alloc_times()
+
+        if verbose:    print("gen-cxl.py test: Cleaning up memory allocators")
+        memutils.cleanup_memory_allocators()
+    
+        exit(0)
+                
     c2i, i2c = load_token_map(c2i_file=args.c2i, i2c_file=args.i2c)
     print(f"Loading token map file from {args.c2i} and {args.i2c}")
     
     print(f"Loading model from {args.model}")
+    start = time.time()
     model = torch.load(args.model)
+    end = time.time()
+    maybe_log_alloc_times()
     memutils.log_stats("After loading model", clearStats=True, printDetails=logDetails, csv=statsInCsv)
+    print(f"Model loading took {end-start:>.3f} seconds")
+    
+    # encode the prompt into a tensor, and reshape it into (1, T)
+    start = time.time()
+    encoded_prompt = encoder(args.prompt, c2i)
+    #print(f"encoded prompt size = {len(encoded_prompt)}, tokens = {encoded_prompt}")
+    context = torch.tensor(encoded_prompt, device=device).unsqueeze(0)
+    end = time.time()
+    memutils.log_stats(prefix="After creating context", printDetails=logDetails, clearStats=True, csv=True)
+    maybe_log_alloc_times()
+    print(f"Context creation took {end-start:>.3f} seconds, context size is {context.size()}")
 
     # Generate response
-    
     start = time.time()
-    # encode the prompt into a tensor, and reshape it into (1, T)
-    # first dimension is the batch, which is expected by the forward method.
-    context = torch.tensor(encoder(args.prompt, c2i), device=device, pin_memory=True).unsqueeze(0)
-    memutils.log_stats(prefix="After creating context", printDetails=logDetails, clearStats=True, csv=True)
-
     response = decoder(model.generate(context, max_new_tokens=args.gen_length)[0].tolist(), i2c)
     end = time.time()
     tokens_generated = min(args.gen_length, len(response) - len(args.prompt))
     memutils.log_stats(prefix="After generate and decode", printDetails=logDetails, clearStats=True, csv=True)
+    maybe_log_alloc_times()
+    print(f"{tokens_generated} tokens generated in {end-start:>.3f} seconds, avg {tokens_generated/(end-start):>.3f} tokens/sec.")
 
     if verbose:
-        print(f"{tokens_generated} tokens generated in {end-start:>.3f} seconds, avg {tokens_generated/(end-start):>.3f} tokens/sec.")
         print("Response:")
         print(response)
-    
+
+    maybe_clear_alloc_times()
+
+    if verbose:    print("gen-cxl.py exit: Cleaning up memory allocators")
+    memutils.cleanup_memory_allocators()
+
     return
 
 
