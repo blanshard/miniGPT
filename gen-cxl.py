@@ -7,11 +7,14 @@ import ctypes
 from data import encoder, decoder, load_token_map
 #import intel_extension_for_pytorch as ipex
 
+# this file's name, for prints
+fileName = __file__.split('/')[-1]
+
 # python memutils module
 import memutils
 
 # Whether to log allocation timings
-allocTimings = False
+allocTimings = True
 
 def maybe_log_alloc_times():
     global allocTimings
@@ -24,25 +27,23 @@ def maybe_clear_alloc_times():
         memutils.clear_alloc_times()
 
 def small_test(verbose, printDetails=False):
-    if verbose:    print("small test: x = torch.empty(1000, 1000)")
+    if verbose:    print(f"{fileName}: small test: x = torch.empty(1000, 1000)")
     x = torch.empty(1000, 1000)
 
-    if verbose:    print("small test: calling memutils.log_stats(** After x)")
-    memutils.log_stats("** After x", clearStats=True, printDetails=printDetails)
+    memutils.log_stats(fileName + ": After x", clearStats=True, printDetails=printDetails)
 
-    if verbose:    print("small test: y = torch.empty(1000, 1000)")
+    if verbose:    print(f"{fileName}: small test: y = torch.empty(1000, 1000)")
     y = torch.empty(1000, 1000)
 
-    if verbose:    print("small test: z = torch.empty(500, 250)")
+    if verbose:    print(f"{fileName}: small test: z = torch.empty(500, 250)")
     z = torch.empty(500, 250)
 
-    if verbose:    print("small test: a = torch.empty(2000, 100)")
+    if verbose:    print(f"{fileName}: small test: a = torch.empty(2000, 100)")
     a = torch.empty(2000, 100)
     
-    if verbose:    print("small test: calling memutils.log_stats(** After y, z and a)")
-    memutils.log_stats("** After y, z and a", clearStats=True, printDetails=printDetails)
+    memutils.log_stats(fileName + ": After y, z and a", clearStats=True, printDetails=printDetails)
     
-    if verbose:    print("small test: returning, all the tensors will be freed")
+    if verbose:    print(f"{fileName}: small test: returning, all the tensors will be freed")
 
     return
 
@@ -64,14 +65,14 @@ def main():
     parser.add_argument('--test', action='store_true', help='Just do small test; default=false', default=False)
     
     args = parser.parse_args()
-    print("args:", args)
+    print(f"{fileName}: args:", args)
     
     # Set print verbosity
     verbose = True
     if args.notverbose:
         verbose = False
     
-    if verbose:    print("Setting up memory utils")
+    print(f"{fileName}: Setting up memory utils")
     memutils.set_period(0)
     logDetails = args.statsdetail
     memutils.init_memory_allocators(args.umf, args.cxl)
@@ -82,7 +83,7 @@ def main():
         #else "xpu" if ipex.xpu.is_available()
         else "cpu"
     )
-    if verbose:    print(f"Using {device} device")
+    if verbose:    print(f"{fileName}: Using {device} device")
     
     if args.test:
         # By calling this in a function we know that anything it allocated is freed before it returns
@@ -93,32 +94,34 @@ def main():
 
         maybe_log_alloc_times()
 
-        if verbose:    print("gen-cxl.py test: Cleaning up memory allocators")
+        if verbose:    print(f"{fileName} test: Cleaning up memory allocators")
         memutils.cleanup_memory_allocators()
     
         exit(0)
                 
     c2i, i2c = load_token_map(c2i_file=args.c2i, i2c_file=args.i2c)
-    print(f"Loading token map file from {args.c2i} and {args.i2c}")
+    print(f"{fileName}: Loading token map file from {args.c2i} and {args.i2c}")
     
-    print(f"Loading model from {args.model}")
+    print(f"{fileName}: Loading model from {args.model}")
     start = time.time()
     model = torch.load(args.model)
     end = time.time()
     maybe_log_alloc_times()
     memutils.log_stats("After loading model", clearStats=True, printDetails=logDetails, csv=statsInCsv)
-    print(f"Model loading took {end-start:>.3f} seconds")
+    print(f"{fileName}: Model loading took {end-start:>.3f} seconds")
     
     # encode the prompt into a tensor, and reshape it into (1, T)
     start = time.time()
     encoded_prompt = encoder(args.prompt, c2i)
-    #print(f"encoded prompt size = {len(encoded_prompt)}, tokens = {encoded_prompt}")
     context = torch.tensor(encoded_prompt, device=device).unsqueeze(0)
     end = time.time()
     memutils.log_stats(prefix="After creating context", printDetails=logDetails, clearStats=True, csv=True)
     maybe_log_alloc_times()
-    print(f"Context creation took {end-start:>.3f} seconds, context size is {context.size()}")
+    print(f"{fileName}: Context creation took {end-start:>.3f} seconds")
 
+    # Create a dummy tensor to make sure pool is created before we start timing
+    dummy = torch.empty(100, 100, device=device)
+    
     # Generate response
     start = time.time()
     response = decoder(model.generate(context, max_new_tokens=args.gen_length)[0].tolist(), i2c)
@@ -126,15 +129,15 @@ def main():
     tokens_generated = min(args.gen_length, len(response) - len(args.prompt))
     memutils.log_stats(prefix="After generate and decode", printDetails=logDetails, clearStats=True, csv=True)
     maybe_log_alloc_times()
-    print(f"{tokens_generated} tokens generated in {end-start:>.3f} seconds, avg {tokens_generated/(end-start):>.3f} tokens/sec.")
+    print(f"{fileName}: {tokens_generated} tokens generated in {end-start:>.3f} seconds, avg {tokens_generated/(end-start):>.3f} tokens/sec.")
 
     if verbose:
-        print("Response:")
+        print(f"{fileName}: Response:")
         print(response)
 
     maybe_clear_alloc_times()
 
-    if verbose:    print("gen-cxl.py exit: Cleaning up memory allocators")
+    if verbose:    print(f"{fileName} exit: Cleaning up memory allocators")
     memutils.cleanup_memory_allocators()
 
     return
