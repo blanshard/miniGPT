@@ -65,14 +65,15 @@ def main():
     parser.add_argument('--test', action='store_true', help='Just do small test; default=false', default=False)
     
     args = parser.parse_args()
-    print(f"{fileName}: args:", args)
     
     # Set print verbosity
     verbose = True
     if args.notverbose:
         verbose = False
+
+    if verbose:    print(f"{fileName}: args:", args)
     
-    print(f"{fileName}: Setting up memory utils")
+    if verbose:    print(f"{fileName}: Setting up memory utils")
     memutils.set_period(0)
     logDetails = args.statsdetail
     memutils.init_memory_allocators(args.umf, args.cxl)
